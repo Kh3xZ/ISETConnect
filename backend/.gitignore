@@ -21,3 +21,6 @@ target/
 # Logs
 *.log
 
+
+# Uploaded study-resource files
+uploads/
