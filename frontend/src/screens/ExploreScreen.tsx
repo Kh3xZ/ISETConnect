@@ -199,7 +199,7 @@ export default function ExploreScreen({ onOpenProfile, tabRequest }: { onOpenPro
         <View style={styles.titleRow}>
           <Text style={styles.title}>Explore</Text>
           <Pressable onPress={onOpenProfile} accessibilityLabel="Open profile summary">
-            <Avatar name={user.nomPrenom} size={30} />
+            <Avatar name={user.nomPrenom} size={30} uri={user.profilePictureUrl} userId={user.id} />
           </Pressable>
         </View>
 
@@ -296,7 +296,7 @@ const PersonRow = memo(function PersonRow({ person: p, isMe, onPress }: { person
   const meta = [dept, p.classe].filter(Boolean).join(' · ');
   return (
     <Pressable onPress={() => onPress(p)} style={({ pressed }) => [styles.row, { alignItems: 'center' }, pressed && { backgroundColor: 'rgba(22,24,28,0.6)' }]}>
-      <Avatar name={p.nomPrenom} size={42} />
+      <Avatar name={p.nomPrenom} size={42} uri={p.profilePictureUrl} userId={p.id} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.nameLine}>
           <Text style={styles.name} numberOfLines={1}>

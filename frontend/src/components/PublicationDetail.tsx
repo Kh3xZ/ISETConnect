@@ -115,7 +115,7 @@ export function PublicationDetail({ publication, onClose, onCommentAdded, onShar
     <View>
       <View style={styles.post}>
         <View style={styles.authorRow}>
-          <Avatar name={p.author.nomPrenom} size={44} />
+          <Avatar name={p.author.nomPrenom} size={44} uri={p.author.profilePictureUrl} userId={p.author.id} />
           <View style={{ flex: 1 }}>
             <View style={styles.nameLine}>
               <Text style={styles.authorName}>{p.author.nomPrenom}</Text>
@@ -186,7 +186,7 @@ export function PublicationDetail({ publication, onClose, onCommentAdded, onShar
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={styles.comment}>
-              <Avatar name={item.author.nomPrenom} size={32} />
+              <Avatar name={item.author.nomPrenom} size={32} uri={item.author.profilePictureUrl} userId={item.author.id} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <View style={styles.nameLine}>
                   <Text style={styles.commentName} numberOfLines={1}>

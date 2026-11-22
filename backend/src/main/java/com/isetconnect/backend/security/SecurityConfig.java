@@ -34,6 +34,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // signed, short-lived download links (token checked in the controller)
                         .requestMatchers(HttpMethod.GET, "/api/resources/*/file").permitAll()
+                        // profile pictures are public (random, unguessable file names)
+                        .requestMatchers(HttpMethod.GET, "/api/profile-pictures/**").permitAll()
 
                         .requestMatchers(HttpMethod.POST, "/api/resources/**").hasRole("PROF")
                         .requestMatchers(HttpMethod.PUT, "/api/resources/**").hasRole("PROF")

@@ -13,6 +13,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,7 @@ public class UserService {
 
     private final UserRepository users;
     private final PasswordEncoder encoder;
+    private final FileStorageService storage;
 
     @Transactional(readOnly = true)
     public UserResponse getById(Long id) {
@@ -69,6 +71,26 @@ public class UserService {
         return UserResponse.from(users.save(u));
     }
 
+    @Transactional
+    public UserResponse updateProfilePicture(User current, MultipartFile file) {
+        User u = find(current.getId());
+        String oldUrl = u.getProfilePictureUrl();
+        String stored = storage.storeImage(file);
+        u.setProfilePictureUrl(storage.profilePictureUrl(stored));
+        users.save(u);
+        storage.deleteProfilePicture(oldUrl);
+        return UserResponse.from(u);
+    }
+
+    @Transactional
+    public UserResponse removeProfilePicture(User current) {
+        User u = find(current.getId());
+        String oldUrl = u.getProfilePictureUrl();
+        u.setProfilePictureUrl(null);
+        users.save(u);
+        storage.deleteProfilePicture(oldUrl);
+        return UserResponse.from(u);
+    }
 
 
     @Transactional

@@ -19,6 +19,9 @@ from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (see `.env.example`).
 Every user response contains `department`, `departmentLabel`, and for students `classe` (e.g. `L2-DSI3`)
 and `level` (`L1`, `L2`, `L3`, `MP1`, `MP2`; null for special classes such as ERASMUS or OACA_*).
 Authors embedded in posts/comments carry `department`, `classe` and `level` too.
+`profilePictureUrl` is present on every user shape (`UserResponse` and the embedded `UserSummary`).
+It is null until a picture is uploaded, otherwise a public path such as `/api/profile-pictures/<uuid>.png`
+(the mobile client resolves it against the API base URL).
 
 ## Database tables (created automatically by Hibernate)
 `users`, `students`, `profs`, `admins`, `communities`, `public_communities`, `private_communities`,
@@ -40,11 +43,18 @@ The class lists live in `util/ClassCatalog.java`.
 | POST | /auth/register | `{nomPrenom,email,password,department,classe}` | creates a STUDENT, returns token. `classe` must belong to `department` (400 otherwise) |
 | POST | /auth/login | `{email,password}` | returns `{token, tokenType, user}` |
 
+### Profile pictures (public)
+| Method | Path | Notes |
+|---|---|---|
+| GET | /profile-pictures/{name} | serves the stored image with no Authorization header (cached for 1 year; a replacement gets a new name) |
+
 ### Users
 | Method | Path | Notes |
 |---|---|---|
 | GET | /users/me | current user |
 | PUT | /users/me | `{nomPrenom?, password?, classe?}` – students change `classe` each year (must stay in their department) |
+| POST | /users/me/profile-picture | multipart `file` – JPEG/PNG/WebP, max 5 MB (content type and magic bytes checked). Replaces the old picture; returns the updated user |
+| DELETE | /users/me/profile-picture | removes the picture and deletes the stored file; returns the updated user |
 | GET | /users?q=&department= | search by name/email, optional department filter |
 | GET | /users/{id} | |
 | GET | /users/{id}/publications | posts of a user (only ones you may see) |

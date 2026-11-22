@@ -9,8 +9,10 @@ import com.isetconnect.backend.util.PageUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/users")
@@ -29,6 +31,17 @@ public class UserController {
     public UserResponse updateMe(@AuthenticationPrincipal User current,
                                  @Valid @RequestBody UpdateProfileRequest req) {
         return userService.updateMe(current, req);
+    }
+
+    @PostMapping(value = "/me/profile-picture", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public UserResponse uploadProfilePicture(@AuthenticationPrincipal User current,
+                                             @RequestParam("file") MultipartFile file) {
+        return userService.updateProfilePicture(current, file);
+    }
+
+    @DeleteMapping("/me/profile-picture")
+    public UserResponse removeProfilePicture(@AuthenticationPrincipal User current) {
+        return userService.removeProfilePicture(current);
     }
 
     @GetMapping

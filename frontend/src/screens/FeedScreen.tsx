@@ -185,7 +185,7 @@ const FeedScreen = forwardRef<FeedHandle, Props>(function FeedScreen({ onCompose
               {busy ? <ActivityIndicator size="small" color={colors.accent} /> : <RefreshIcon size={16} />}
             </Pressable>
             <Pressable onPress={onOpenProfile} accessibilityLabel="Open profile summary">
-              <Avatar name={user.nomPrenom} size={32} />
+              <Avatar name={user.nomPrenom} size={32} uri={user.profilePictureUrl} userId={user.id} />
             </Pressable>
           </View>
         </View>

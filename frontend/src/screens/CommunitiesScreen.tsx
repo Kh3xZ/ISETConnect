@@ -122,7 +122,7 @@ const CommunitiesScreen = forwardRef<CommunitiesHandle, Props>(function Communit
         <View style={styles.titleRow}>
           <Text style={styles.title}>Communities</Text>
           <Pressable onPress={onOpenProfile} accessibilityLabel="Open profile summary">
-            <Avatar name={user.nomPrenom} size={30} />
+            <Avatar name={user.nomPrenom} size={30} uri={user.profilePictureUrl} userId={user.id} />
           </Pressable>
         </View>
 

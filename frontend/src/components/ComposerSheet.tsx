@@ -108,7 +108,7 @@ export function ComposerSheet({ visible, onClose, onPublished }: Props) {
 
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingTop: 14 }}>
             <View style={styles.author}>
-              <Avatar name={user.nomPrenom} size={32} />
+              <Avatar name={user.nomPrenom} size={32} uri={user.profilePictureUrl} userId={user.id} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.authorName}>{user.nomPrenom}</Text>
                 <Text style={styles.authorMeta} numberOfLines={1}>

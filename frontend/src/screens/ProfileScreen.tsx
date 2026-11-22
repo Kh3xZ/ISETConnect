@@ -180,7 +180,7 @@ const ProfileScreen = forwardRef<ProfileHandle, Props>(function ProfileScreen({ 
       <View style={styles.card}>
         <View style={styles.topRow}>
           <View style={styles.avatarWrap}>
-            <Avatar name={user.nomPrenom} size={64} />
+            <Avatar name={user.nomPrenom} size={64} uri={user.profilePictureUrl} userId={user.id} />
           </View>
           <View style={styles.topActions}>
             <Pressable onPress={() => setEditProfileOpen(true)} style={({ pressed }) => [styles.outlineBtn, pressed && { backgroundColor: colors.surfaceHover }]}>

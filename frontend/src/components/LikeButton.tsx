@@ -142,86 +142,12 @@ function LikeButtonBase({ publicationId, liked, count, size = 18.75, showCount =
         </Animated.View>
       </View>
 
-      {showCount && <RollingCount value={total} color={tint} />}
+      {showCount && <Text style={[styles.count, { color: tint }]}>{formatCount(total)}</Text>}
     </Pressable>
   );
 }
 
 export const LikeButton = memo(LikeButtonBase);
-
-// ── Rolling count: changed digits slide like X's ─────────────────────────────
-const LINE = 18;
-
-function RollingCount({ value, color }: { value: number; color: string }) {
-  const text = formatCount(value);
-  const prevText = useRef(text);
-  const [from, setFrom] = useState(text);
-  const dir = useRef(1);
-  const t = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (text === prevText.current) return;
-    dir.current = value >= (parseCount(prevText.current) ?? 0) ? 1 : -1;
-    setFrom(prevText.current);
-    prevText.current = text;
-    t.setValue(0);
-    Animated.timing(t, { toValue: 1, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
-
-  // align from the right so only the digits that actually change roll
-  const len = Math.max(text.length, from.length);
-  const a = from.padStart(len, ' ');
-  const b = text.padStart(len, ' ');
-
-  return (
-    <View style={styles.countRow} accessible={false}>
-      {Array.from({ length: len }).map((_, i) => {
-        const ca = a[i] === ' ' ? '' : a[i];
-        const cb = b[i] === ' ' ? '' : b[i];
-        if (ca === cb) {
-          return (
-            <Text key={i} style={[styles.count, { color }]}>
-              {cb}
-            </Text>
-          );
-        }
-        return (
-          <View key={i} style={styles.cell}>
-            {/* invisible copy sizes the cell to the incoming character */}
-            <Text style={[styles.count, { color: 'transparent' }]}>{cb}</Text>
-            <Animated.Text
-              style={[
-                styles.count,
-                styles.abs,
-                { color, transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -dir.current * LINE] }) }] },
-              ]}
-            >
-              {ca}
-            </Animated.Text>
-            <Animated.Text
-              style={[
-                styles.count,
-                styles.abs,
-                { color, transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [dir.current * LINE, 0] }) }] },
-              ]}
-            >
-              {cb}
-            </Animated.Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function parseCount(s: string): number | null {
-  if (!s) return 0;
-  const m = /^([\d.]+)([KMB]?)$/.exec(s);
-  if (!m) return null;
-  const mult = m[2] === 'K' ? 1e3 : m[2] === 'M' ? 1e6 : m[2] === 'B' ? 1e9 : 1;
-  return parseFloat(m[1]) * mult;
-}
 
 const styles = StyleSheet.create({
   root: { flexDirection: 'row', alignItems: 'center' },
@@ -229,9 +155,6 @@ const styles = StyleSheet.create({
   burstLayer: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   ring: { position: 'absolute', width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.like },
   particle: { position: 'absolute', width: 4, height: 4, borderRadius: 2 },
-  countRow: { flexDirection: 'row', alignItems: 'center', height: LINE, overflow: 'hidden' },
-  cell: { height: LINE, justifyContent: 'center', overflow: 'hidden' },
-  abs: { position: 'absolute', left: 0, top: 0 },
   // X: 13px, regular weight, line-height 16px, muted gray (pink when liked / hovered)
-  count: { fontSize: 13, lineHeight: LINE, fontFamily: fonts.regular },
+  count: { marginLeft: 4, fontSize: 13, lineHeight: 18, fontFamily: fonts.regular },
 });

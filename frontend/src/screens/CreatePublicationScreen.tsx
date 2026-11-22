@@ -278,7 +278,7 @@ export default function CreatePublicationScreen({ visible, onClose, onPublished,
 
           <View style={styles.composerRow}>
             <View style={{ marginTop: 2 }}>
-              <Avatar name={user.nomPrenom} size={38} />
+              <Avatar name={user.nomPrenom} size={38} uri={user.profilePictureUrl} userId={user.id} />
             </View>
 
             <View style={{ flex: 1, minWidth: 0 }}>

@@ -1,7 +1,15 @@
 import { Platform } from 'react-native';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.77.74.133:8080/api';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.11:8080/api';
 const TIMEOUT_MS = 15000;
+
+/** Turns a public API path (or an absolute/local URI) into something <Image> can load. */
+export function resolveImageUrl(uri?: string | null): string | undefined {
+  if (!uri) return undefined;
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(uri)) return uri;
+  const origin = API_BASE_URL.replace(/\/api\/?$/, '');
+  return `${origin}${uri.startsWith('/') ? '' : '/'}${uri}`;
+}
 
 
 export type Role = 'STUDENT' | 'PROF' | 'ADMIN';
@@ -15,6 +23,8 @@ export interface UserResponse {
   departmentLabel: string | null;
   classe: string | null;
   level: string | null;
+  /** Public path such as /api/profile-pictures/<uuid>.png, or null. */
+  profilePictureUrl: string | null;
   createdAt: string;
 }
 
@@ -58,6 +68,7 @@ export interface UserSummary {
   department: string | null;
   classe: string | null;
   level: string | null;
+  profilePictureUrl: string | null;
 }
 
 export interface PublicationResponse {
@@ -219,13 +230,14 @@ async function request<T>(path: string, { method = 'GET', body, form, timeoutMs 
       body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
       signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
     if (controller.signal.aborted) {
       throw new ApiError(0, form
         ? 'The upload timed out. Try a smaller file or check your connection.'
         : 'The request timed out. Check your connection and try again.');
     }
-    throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
+    const detail = form && err instanceof Error && err.message ? ` (${err.message})` : '';
+    throw new ApiError(0, `Can't reach the server. Check your connection and try again.${detail}`);
   } finally {
     clearTimeout(timer);
   }
@@ -431,6 +443,57 @@ export const updateResource = (id: number, body: ResourceBody) =>
 export const replaceResourceAttachment = async (id: number, file: PickedFile) =>
   request<ResourceResponse>(`/resources/${id}/attachment`, { method: 'POST', form: await fileForm(file), timeoutMs: UPLOAD_TIMEOUT_MS });
 
+/** expo-file-system's native uploader (iOS + Android). Optional: falls back to FormData when unavailable. */
+const loadFileSystem = (): any => {
+  try {
+    return require('expo-file-system/legacy');
+  } catch {
+    try {
+      return require('expo-file-system');
+    } catch {
+      return null;
+    }
+  }
+};
+
+const nativeUpload = async <T>(FS: any, path: string, file: PickedFile): Promise<T> => {
+  let result: { status: number; body: string };
+  try {
+    result = await FS.uploadAsync(`${API_BASE_URL}${path}`, file.uri, {
+      httpMethod: 'POST',
+      uploadType: FS.FileSystemUploadType?.MULTIPART ?? 1,
+      fieldName: 'file',
+      mimeType: file.mimeType || 'image/jpeg',
+      headers: { Accept: 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    });
+  } catch (e) {
+    const detail = e instanceof Error && e.message ? ` (${e.message})` : '';
+    throw new ApiError(0, `Can't reach the server. Check your connection and try again.${detail}`);
+  }
+  let data: any = null;
+  try {
+    data = result.body ? JSON.parse(result.body) : null;
+  } catch {
+    data = null;
+  }
+  if (result.status < 200 || result.status >= 300) {
+    if (result.status === 401 && authToken) onUnauthorized?.();
+    throw new ApiError(result.status, data?.message || `Request failed (HTTP ${result.status})`, data?.fieldErrors ?? undefined);
+  }
+  return data as T;
+};
+
+export const uploadProfilePicture = async (file: PickedFile) => {
+  if (Platform.OS !== 'web') {
+    const FS = loadFileSystem();
+    if (FS?.uploadAsync) return nativeUpload<UserResponse>(FS, '/users/me/profile-picture', file);
+  }
+  return request<UserResponse>('/users/me/profile-picture', { method: 'POST', form: await fileForm(file), timeoutMs: UPLOAD_TIMEOUT_MS });
+};
+
+export const removeProfilePicture = () =>
+  request<UserResponse>('/users/me/profile-picture', { method: 'DELETE' });
+
 export const deleteResource = (id: number) => request<void>(`/resources/${id}`, { method: 'DELETE' });
 
 
@@ -455,6 +518,9 @@ export default {
   deleteCommunity,
   getCommunityMembers,
   updateMe,
+  uploadProfilePicture,
+  removeProfilePicture,
+  resolveImageUrl,
   getUserPublications,
   updatePublication,
   deletePublication,

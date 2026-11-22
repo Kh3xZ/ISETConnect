@@ -27,7 +27,7 @@ export function UserProfileSheet({ user, isMe, onClose }: Props) {
       {u && (
         <View>
           <View style={styles.top}>
-            <Avatar name={u.nomPrenom} size={52} />
+            <Avatar name={u.nomPrenom} size={52} uri={u.profilePictureUrl} userId={u.id} />
             <RoleBadge role={u.role} />
             {isMe && (
               <View style={styles.me}>

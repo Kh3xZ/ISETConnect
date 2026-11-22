@@ -1,11 +1,16 @@
+import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { ApiError, UpdateProfileBody, updateMe } from '../services/api';
+import { ApiError, PickedFile, UpdateProfileBody, UserResponse, removeProfilePicture, updateMe, uploadProfilePicture } from '../services/api';
 import { colors, fonts } from '../theme';
 import { departmentLabel } from '../utils/format';
+import { Avatar } from './Avatar';
 import { CloseIcon } from './icons';
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // backend limit: 5 MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 interface Props {
   visible: boolean;
@@ -22,7 +27,10 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [picked, setPicked] = useState<PickedFile | null>(null);
+  const [removeRequested, setRemoveRequested] = useState(false);
 
   useEffect(() => {
     if (!visible || !user) return;
@@ -32,7 +40,11 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
     setConfirm('');
     setError('');
     setSaving(false);
-  }, [visible, user]);
+    setUploading(false);
+    setPicked(null);
+    setRemoveRequested(false);
+    // Only re-seed when the modal opens: updateUser() after Save must not discard form state.
+  }, [visible, user?.id]);
 
   if (!user) return null;
 
@@ -44,8 +56,8 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
   const wantsPassword = password.length > 0 || confirm.length > 0;
   const passwordOk = !wantsPassword || (password.length >= 6 && password === confirm);
 
-  const dirty = nameChanged || classeChanged || wantsPassword;
-  const canSave = nameTrim.length > 0 && passwordOk && dirty && !saving;
+  const dirty = nameChanged || classeChanged || wantsPassword || !!picked || removeRequested;
+  const canSave = nameTrim.length > 0 && passwordOk && dirty && !saving && !uploading;
 
   let hint = '';
   if (nameTrim.length === 0) hint = 'Your name cannot be empty.';
@@ -61,16 +73,103 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
       if (nameChanged) body.nomPrenom = nameTrim;
       if (classeChanged) body.classe = classeTrim;
       if (wantsPassword) body.password = password;
-      const updated = await updateMe(body);
-      updateUser(updated);
+
+      let updated: UserResponse | null = null;
+      if (Object.keys(body).length > 0) updated = await updateMe(body);
+      if (picked) {
+        updated = await uploadProfilePicture(picked);
+      } else if (removeRequested) {
+        updated = await removeProfilePicture();
+      }
+
+      if (updated) updateUser(updated);
+      setPicked(null);
+      setRemoveRequested(false);
       onSaved();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not update your profile. Please try again.');
+      setError(e instanceof ApiError ? e.message : 'Could not save your changes. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
+  const pickPhoto = async () => {
+    setError('');
+    try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.getMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          const asked = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!asked.granted) {
+            setError('Allow photo library access to choose a profile picture.');
+            return;
+          }
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      if (asset.mimeType && !ALLOWED_IMAGE_TYPES.includes(asset.mimeType)) {
+        setError('Choose a JPEG, PNG or WebP image.');
+        return;
+      }
+      if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
+        setError('This image is larger than 5 MB. Choose a smaller one.');
+        return;
+      }
+      const lowerUri = (asset.fileName ?? asset.uri).toLowerCase();
+      const mime =
+        asset.mimeType && ALLOWED_IMAGE_TYPES.includes(asset.mimeType)
+          ? asset.mimeType
+          : lowerUri.endsWith('.png')
+            ? 'image/png'
+            : lowerUri.endsWith('.webp')
+              ? 'image/webp'
+              : 'image/jpeg';
+      const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+      const file: PickedFile = {
+        uri: asset.uri,
+        name: `profile-${Date.now()}.${ext}`,
+        mimeType: mime,
+        size: asset.fileSize,
+        file: asset.file,
+      };
+      setPicked(file);
+      setRemoveRequested(false);
+
+      // Upload right away so the user doesn't depend on the Save button.
+      setUploading(true);
+      try {
+        const updated = await uploadProfilePicture(file);
+        updateUser(updated);
+        setPicked(null);
+        onSaved();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'Could not upload the photo. Please try again.');
+      } finally {
+        setUploading(false);
+      }
+    } catch {
+      setError("Couldn't open the gallery. Check that photo access is allowed.");
+    }
+  };
+
+  const toggleRemovePhoto = () => {
+    setError('');
+    if (removeRequested) {
+      setRemoveRequested(false);
+    } else {
+      setPicked(null);
+      setRemoveRequested(true);
+    }
+  };
+
+  const previewUri = removeRequested ? null : picked?.uri ?? user.profilePictureUrl;
   const dept = user.departmentLabel ?? departmentLabel(user.department) ?? '—';
 
   return (
@@ -94,6 +193,43 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
               <Text style={styles.alertText}>{error}</Text>
             </View>
           )}
+
+          <Text style={styles.sectionTitle}>Profile picture</Text>
+          <View style={styles.photoRow}>
+            <View style={styles.photoWrap}>
+              <Avatar name={user.nomPrenom} size={72} uri={previewUri} userId={picked || removeRequested ? undefined : user.id} />
+              {(saving || uploading) && (
+                <View style={styles.photoBusy}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
+              )}
+            </View>
+            <View style={styles.photoActions}>
+              <Pressable
+                onPress={pickPhoto}
+                disabled={saving || uploading}
+                style={({ pressed }) => [styles.photoBtn, (saving || uploading) && { opacity: 0.5 }, pressed && { backgroundColor: colors.surfaceHover }]}
+              >
+                <Text style={styles.photoBtnText}>{picked ? 'Change photo' : 'Choose from gallery'}</Text>
+              </Pressable>
+              {(!!user.profilePictureUrl || !!picked) && (
+                <Pressable
+                  onPress={toggleRemovePhoto}
+                  disabled={saving}
+                  style={({ pressed }) => [styles.photoBtn, pressed && { backgroundColor: 'rgba(244,33,46,0.10)' }]}
+                >
+                  <Text style={styles.photoRemoveText}>{removeRequested ? 'Keep current photo' : 'Remove photo'}</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+          <Text style={styles.help}>
+            {removeRequested
+              ? 'The picture will be removed when you tap Save.'
+              : picked
+                ? (uploading ? 'Uploading your photo…' : 'Photo not uploaded yet — pick it again to retry.')
+                : 'JPEG, PNG or WebP · up to 5 MB'}
+          </Text>
 
           <Text style={styles.label}>Full name</Text>
           <TextInput value={name} onChangeText={setName} maxLength={120} placeholder="Your full name" placeholderTextColor={colors.muted} style={styles.input} />
@@ -121,6 +257,9 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            autoComplete="off"
+            textContentType="none"
+            importantForAutofill="no"
             autoCapitalize="none"
             autoCorrect={false}
             maxLength={100}
@@ -132,6 +271,9 @@ export function EditProfileModal({ visible, onClose, onSaved }: Props) {
             value={confirm}
             onChangeText={setConfirm}
             secureTextEntry
+            autoComplete="off"
+            textContentType="none"
+            importantForAutofill="no"
             autoCapitalize="none"
             autoCorrect={false}
             maxLength={100}
@@ -169,6 +311,13 @@ const styles = StyleSheet.create({
   body: { padding: 16 },
   alert: { marginBottom: 14, padding: 12, borderRadius: 10, backgroundColor: 'rgba(244,33,46,0.10)', borderWidth: 1, borderColor: 'rgba(244,33,46,0.35)' },
   alertText: { fontSize: 12.5, lineHeight: 17, fontFamily: fonts.medium, color: colors.danger },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  photoWrap: { width: 72, height: 72 },
+  photoBusy: { position: 'absolute', top: 0, left: 0, width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  photoActions: { flex: 1, gap: 8 },
+  photoBtn: { minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  photoBtnText: { fontSize: 12.5, fontFamily: fonts.semibold, color: colors.text },
+  photoRemoveText: { fontSize: 12.5, fontFamily: fonts.semibold, color: colors.danger },
   label: { marginTop: 16, marginBottom: 8, fontSize: 13, fontFamily: fonts.semibold, color: colors.text },
   sectionTitle: { marginTop: 28, marginBottom: 10, fontSize: 15, fontFamily: fonts.bold, color: colors.text },
   input: { minHeight: 46, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 15, fontFamily: fonts.regular },

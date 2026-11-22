@@ -38,6 +38,10 @@ public abstract class User {
     @Column(length = 40)
     private Department department;
 
+    /** Public path of the profile picture, e.g. /api/profile-pictures/<uuid>.png. */
+    @Column(name = "profile_picture_url", length = 512)
+    private String profilePictureUrl;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

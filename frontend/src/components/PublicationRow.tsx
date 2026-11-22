@@ -28,7 +28,7 @@ function PublicationRowBase({ publication: p, onPress, onShare, onLikeChange, on
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surface }]}
     >
       <View style={styles.avatar}>
-        <Avatar name={p.author.nomPrenom} size={40} />
+        <Avatar name={p.author.nomPrenom} size={40} uri={p.author.profilePictureUrl} userId={p.author.id} />
       </View>
 
       <View style={styles.col}>

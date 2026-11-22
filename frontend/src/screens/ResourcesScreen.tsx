@@ -156,7 +156,7 @@ export default function ResourcesScreen({ onOpenProfile }: { onOpenProfile: () =
         <View style={styles.titleRow}>
           <Text style={styles.title}>Resources</Text>
           <Pressable onPress={onOpenProfile} accessibilityLabel="Open profile">
-            <Avatar name={user.nomPrenom} size={30} />
+            <Avatar name={user.nomPrenom} size={30} uri={user.profilePictureUrl} userId={user.id} />
           </Pressable>
         </View>
 

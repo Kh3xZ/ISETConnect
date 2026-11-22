@@ -368,7 +368,7 @@ const MemberRow = memo(function MemberRow({ member: m, isOwnerRow, isMe }: { mem
   const meta = authorMeta(m.user);
   return (
     <View style={styles.memberRow}>
-      <Avatar name={m.user.nomPrenom} size={40} />
+      <Avatar name={m.user.nomPrenom} size={40} uri={m.user.profilePictureUrl} userId={m.user.id} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.nameLine}>
           <Text style={styles.memberName} numberOfLines={1}>
