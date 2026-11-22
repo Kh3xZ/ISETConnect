@@ -1,5 +1,6 @@
 package com.isetconnect.backend.repository;
 
+import com.isetconnect.backend.model.Department;
 import com.isetconnect.backend.model.Publication;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,18 @@ public interface PublicationRepository extends JpaRepository<Publication, Long> 
             """)
     Page<Publication> findFeed(@Param("userId") Long userId, Pageable pageable);
 
+
+    /** Feed filtered on the author's department ("My Department" tab). */
+    @EntityGraph(attributePaths = {"author", "community"})
+    @Query("""
+            select p from Publication p left join p.community c
+            where p.author.department = :department
+              and (c is null or c.isPrivate = false
+                   or exists (select 1 from CommunityMember m where m.community = c and m.user.id = :userId))
+            """)
+    Page<Publication> findFeedByDepartment(@Param("userId") Long userId,
+                                           @Param("department") Department department,
+                                           Pageable pageable);
 
     @EntityGraph(attributePaths = {"author", "community"})
     @Query("""

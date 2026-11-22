@@ -27,14 +27,25 @@ public class PublicationController {
     @GetMapping("/publications")
     public PageResponse<PublicationResponse> feed(@AuthenticationPrincipal User current,
                                                   @RequestParam(required = false) Long communityId,
+                                                  @RequestParam(required = false) String department,
                                                   @RequestParam(defaultValue = "0") int page,
                                                   @RequestParam(defaultValue = "20") int size) {
-        return publicationService.feed(current, communityId, PageUtil.newestFirst(page, size));
+        return publicationService.feed(current, communityId, department, PageUtil.newestFirst(page, size));
     }
 
     @GetMapping("/publications/{id}")
     public PublicationResponse get(@AuthenticationPrincipal User current, @PathVariable Long id) {
         return publicationService.get(id, current);
+    }
+
+    @PostMapping("/publications/{id}/like")
+    public LikeResponse like(@AuthenticationPrincipal User current, @PathVariable Long id) {
+        return publicationService.like(id, current);
+    }
+
+    @DeleteMapping("/publications/{id}/like")
+    public LikeResponse unlike(@AuthenticationPrincipal User current, @PathVariable Long id) {
+        return publicationService.unlike(id, current);
     }
 
     @PostMapping("/publications")

@@ -3,7 +3,9 @@ package com.isetconnect.backend.controller;
 import com.isetconnect.backend.dto.PageResponse;
 import com.isetconnect.backend.dto.ResourceRequest;
 import com.isetconnect.backend.dto.ResourceResponse;
+import com.isetconnect.backend.exception.ApiException;
 import com.isetconnect.backend.model.User;
+import com.isetconnect.backend.security.JwtService;
 import com.isetconnect.backend.service.StudyResourceService;
 import com.isetconnect.backend.util.PageUtil;
 import jakarta.validation.Valid;
@@ -20,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 
 
@@ -31,6 +34,7 @@ import java.util.List;
 public class StudyResourceController {
 
     private final StudyResourceService resourceService;
+    private final JwtService jwtService;
 
     @GetMapping
     public PageResponse<ResourceResponse> list(@RequestParam(required = false) String module,
@@ -61,6 +65,27 @@ public class StudyResourceController {
     }
 
 
+    /**
+     * Returns a short-lived link (relative to the API base) that downloads the attachment without an
+     * Authorization header, so a phone can open it in its browser.
+     */
+    @GetMapping("/{id}/download-link")
+    public Map<String, String> downloadLink(@PathVariable Long id) {
+        ResourceResponse r = resourceService.get(id);
+        if (!r.hasAttachment()) {
+            throw ApiException.notFound("This resource has no attachment");
+        }
+        return Map.of("url", "/resources/" + id + "/file?t=" + jwtService.generateDownloadToken(id));
+    }
+
+    @GetMapping("/{id}/file")
+    public ResponseEntity<Resource> file(@PathVariable Long id, @RequestParam("t") String token) {
+        if (!jwtService.isValidDownloadToken(token, id)) {
+            throw ApiException.forbidden("This download link is invalid or has expired");
+        }
+        return download(id);
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ResourceResponse> create(@AuthenticationPrincipal User current,
                                                    @RequestParam("title") String title,
@@ -68,7 +93,7 @@ public class StudyResourceController {
                                                    @RequestParam(value = "module", required = false) String module,
                                                    @RequestParam(value = "file", required = false) MultipartFile file) {
         if (title == null || title.isBlank()) {
-            throw com.isetconnect.backend.exception.ApiException.badRequest("title is required");
+            throw ApiException.badRequest("title is required");
         }
         ResourceRequest req = new ResourceRequest(title, description, module);
         return ResponseEntity.status(HttpStatus.CREATED).body(resourceService.create(current, req, file));

@@ -62,6 +62,8 @@ The class lists live in `util/ClassCatalog.java`.
 | GET | /publications?communityId= | home feed (general + public + your private communities) |
 | POST | /publications | `{title,content,communityId?}` – must be a member of the community |
 | GET | /publications/{id} | |
+| POST | /publications/{id}/like | Like a publication; returns `{liked,likesCount}` |
+| DELETE | /publications/{id}/like | Remove your like; returns `{liked,likesCount}` |
 | PUT | /publications/{id} | author / admin |
 | DELETE | /publications/{id} | author / admin / community owner |
 | GET | /publications/{id}/comments | oldest first |

@@ -12,10 +12,10 @@ import {
 } from '@expo-google-fonts/inter';
 import { ToastProvider } from './src/components/Toast';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import HomePlaceholder from './src/screens/HomePlaceholder';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import { colors } from './src/theme';
+import HomeScreen from './src/screens/HomeScreen';
 
 function Root() {
   const { user, loading } = useAuth();
@@ -44,7 +44,7 @@ function Root() {
     );
   }
 
-  if (user) return <HomePlaceholder />;
+  if (user) return <HomeScreen  />;
   if (screen === 'signup') return <SignupScreen onSignIn={() => setScreen('login')} />;
   return <LoginScreen onSignUp={() => setScreen('signup')} />;
 }

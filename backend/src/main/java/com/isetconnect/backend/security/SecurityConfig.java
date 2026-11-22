@@ -32,6 +32,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/api/meta/**", "/api/health", "/api/test/db").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // signed, short-lived download links (token checked in the controller)
+                        .requestMatchers(HttpMethod.GET, "/api/resources/*/file").permitAll()
 
                         .requestMatchers(HttpMethod.POST, "/api/resources/**").hasRole("PROF")
                         .requestMatchers(HttpMethod.PUT, "/api/resources/**").hasRole("PROF")

@@ -13,6 +13,8 @@ export const colors = {
   whiteBtnHover: '#D7DBDC',
   whiteBtnText: '#0F1419',
   danger: '#F4212E',
+  like: '#F91880',
+  likeBg: 'rgba(249,24,128,0.1)',
   success: '#00BA7C',
   backdrop: 'rgba(91,112,131,0.4)',
 };

@@ -1,4 +1,6 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080/api';
+import { Platform } from 'react-native';
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.77.74.133:8080/api';
 const TIMEOUT_MS = 15000;
 
 
@@ -49,6 +51,122 @@ export interface DbStatusResponse {
 }
 
 
+export interface UserSummary {
+  id: number;
+  nomPrenom: string;
+  role: Role;
+  department: string | null;
+  classe: string | null;
+  level: string | null;
+}
+
+export interface PublicationResponse {
+  id: number;
+  title: string;
+  content: string;
+  author: UserSummary;
+  communityId: number | null;
+  communityName: string | null;
+  commentsCount: number;
+  likesCount: number;
+  liked: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface LikeResponse {
+  liked: boolean;
+  likesCount: number;
+}
+
+export interface CommentResponse {
+  id: number;
+  content: string;
+  author: UserSummary;
+  publicationId: number;
+  createdAt: string;
+}
+
+export interface CommunityResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  isPrivate: boolean | null;
+  nbMax: number | null;
+  membersCount: number;
+  joined: boolean;
+  ownerId: number | null;
+  createdAt: string;
+}
+
+export interface PageResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  last: boolean;
+}
+
+export interface PublicationBody {
+  title: string;
+  content: string;
+  communityId?: number | null;
+}
+
+
+export interface MemberResponse {
+  user: UserSummary;
+  joinedAt: string;
+}
+
+export interface CommunityBody {
+  name: string;
+  description?: string | null;
+  isPrivate?: boolean;
+  /** Private only. On update, omit to keep the current key (min 4 chars). */
+  key?: string;
+  /** Private only (>= 1). */
+  nbMax?: number;
+}
+
+
+export interface UpdateProfileBody {
+  nomPrenom?: string;
+  classe?: string;
+  /** min 6 chars; omit to keep the current password */
+  password?: string;
+}
+
+
+export interface ResourceResponse {
+  id: number;
+  title: string;
+  description: string | null;
+  module: string | null;
+  hasAttachment: boolean;
+  attachmentName: string | null;
+  downloadUrl: string | null;
+  uploader: UserSummary;
+  createdAt: string;
+}
+
+export interface ResourceBody {
+  title: string;
+  description?: string | null;
+  module?: string | null;
+}
+
+/** A file chosen with the document picker. */
+export interface PickedFile {
+  uri: string;
+  name: string;
+  mimeType?: string | null;
+  size?: number | null;
+  file?: Blob;
+}
+
+
 export class ApiError extends Error {
   status: number;
   fieldErrors?: Record<string, string>;
@@ -80,14 +198,17 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** multipart/form-data payload (file uploads). Content-Type is set by fetch, with the boundary. */
+  form?: FormData;
+  timeoutMs?: number;
 }
 
-async function request<T>(path: string, { method = 'GET', body }: RequestOptions = {}): Promise<T> {
+async function request<T>(path: string, { method = 'GET', body, form, timeoutMs = TIMEOUT_MS }: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (body !== undefined && !form) headers['Content-Type'] = 'application/json';
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
   let response: Response;
@@ -95,10 +216,15 @@ async function request<T>(path: string, { method = 'GET', body }: RequestOptions
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
       signal: controller.signal,
     });
   } catch {
+    if (controller.signal.aborted) {
+      throw new ApiError(0, form
+        ? 'The upload timed out. Try a smaller file or check your connection.'
+        : 'The request timed out. Check your connection and try again.');
+    }
     throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
   } finally {
     clearTimeout(timer);
@@ -141,12 +267,204 @@ export const getMe = () => request<UserResponse>('/users/me');
 export const checkBackendHealth = () => request<HealthResponse>('/health');
 export const checkDbStatus = () => request<DbStatusResponse>('/test/db');
 
+export interface FeedParams {
+  page?: number;
+  size?: number;
+  /** Department enum code (e.g. TECHNOLOGIES_INFORMATIQUE) — powers the "My Department" tab. */
+  department?: string;
+  communityId?: number;
+}
+
+export const getPublications = ({ page = 0, size = 10, department, communityId }: FeedParams = {}) => {
+  const q = new URLSearchParams({ page: String(page), size: String(size) });
+  if (department) q.set('department', department);
+  if (communityId !== undefined) q.set('communityId', String(communityId));
+  return request<PageResponse<PublicationResponse>>(`/publications?${q.toString()}`);
+};
+
+/**
+ * "My Department" feed, filtered on the app side (the backend feed has no department filter, so this
+ * keeps working with any backend version). `page` is a BACKEND page index: we scan forward until we
+ * have `size` matching publications, and return the last scanned page so the next call continues after it.
+ */
+export const getDepartmentFeed = async (
+  department: string,
+  { page = 0, size = 10 }: { page?: number; size?: number } = {},
+): Promise<PageResponse<PublicationResponse>> => {
+  const MAX_SCANNED_PAGES = 10;
+  const collected: PublicationResponse[] = [];
+  let res = await getPublications({ page, size });
+  let scanned = 1;
+  collected.push(...res.content.filter((p) => p.author.department === department));
+  while (!res.last && collected.length < size && scanned < MAX_SCANNED_PAGES) {
+    res = await getPublications({ page: res.page + 1, size });
+    scanned += 1;
+    collected.push(...res.content.filter((p) => p.author.department === department));
+  }
+  return { ...res, content: collected, totalElements: collected.length };
+};
+
+
+export const createPublication = (body: PublicationBody) =>
+  request<PublicationResponse>('/publications', { method: 'POST', body });
+
+export const getComments = (publicationId: number, page = 0, size = 30) =>
+  request<PageResponse<CommentResponse>>(`/publications/${publicationId}/comments?page=${page}&size=${size}`);
+
+export const addComment = (publicationId: number, content: string) =>
+  request<CommentResponse>(`/publications/${publicationId}/comments`, { method: 'POST', body: { content } });
+
+export const likePublication = (publicationId: number) =>
+  request<LikeResponse>(`/publications/${publicationId}/like`, { method: 'POST' });
+
+export const unlikePublication = (publicationId: number) =>
+  request<LikeResponse>(`/publications/${publicationId}/like`, { method: 'DELETE' });
+
+export const getMyCommunities = () => request<CommunityResponse[]>('/communities/mine');
+
+
+export interface SearchParams {
+  q?: string;
+  page?: number;
+  size?: number;
+}
+
+export const searchUsers = ({ q, page = 0, size = 20 }: SearchParams = {}) => {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q && q.trim()) params.set('q', q.trim());
+  return request<PageResponse<UserResponse>>(`/users?${params.toString()}`);
+};
+
+export const getCommunities = ({ q, page = 0, size = 20 }: SearchParams = {}) => {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q && q.trim()) params.set('q', q.trim());
+  return request<PageResponse<CommunityResponse>>(`/communities?${params.toString()}`);
+};
+
+/** Public communities: no key. Private communities: the join key is required. */
+export const joinCommunity = (id: number, key?: string) =>
+  request<CommunityResponse>(`/communities/${id}/join`, { method: 'POST', body: key ? { key } : undefined });
+
+export const leaveCommunity = (id: number) => request<void>(`/communities/${id}/leave`, { method: 'POST' });
+
+
+export const createCommunity = (body: CommunityBody) =>
+  request<CommunityResponse>('/communities', { method: 'POST', body });
+
+export const updateCommunity = (id: number, body: CommunityBody) =>
+  request<CommunityResponse>(`/communities/${id}`, { method: 'PUT', body });
+
+export const deleteCommunity = (id: number) => request<void>(`/communities/${id}`, { method: 'DELETE' });
+
+export const getCommunityMembers = (id: number, page = 0, size = 30) =>
+  request<PageResponse<MemberResponse>>(`/communities/${id}/members?page=${page}&size=${size}`);
+
+
+export const updateMe = (body: UpdateProfileBody) => request<UserResponse>('/users/me', { method: 'PUT', body });
+
+export const getUserPublications = (userId: number, { page = 0, size = 10 }: { page?: number; size?: number } = {}) =>
+  request<PageResponse<PublicationResponse>>(`/users/${userId}/publications?page=${page}&size=${size}`);
+
+export const updatePublication = (id: number, body: PublicationBody) =>
+  request<PublicationResponse>(`/publications/${id}`, { method: 'PUT', body });
+
+export const deletePublication = (id: number) => request<void>(`/publications/${id}`, { method: 'DELETE' });
+
+
+export interface ResourceSearch {
+  q?: string;
+  module?: string;
+  page?: number;
+  size?: number;
+}
+
+export const getResources = ({ q, module, page = 0, size = 15 }: ResourceSearch = {}) => {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q && q.trim()) params.set('q', q.trim());
+  if (module) params.set('module', module);
+  return request<PageResponse<ResourceResponse>>(`/resources?${params.toString()}`);
+};
+
+export const getResourceModules = () => request<string[]>('/resources/modules');
+
+/** Short-lived link (relative to the API base) that downloads the file without an Authorization header. */
+export const getResourceDownloadUrl = async (id: number): Promise<string> => {
+  const { url } = await request<{ url: string }>(`/resources/${id}/download-link`);
+  return `${API_BASE_URL}${url}`;
+};
+
+const appendFile = async (form: FormData, file: PickedFile) => {
+  if (Platform.OS === 'web') {
+    let blob = file.file;
+    if (!blob) {
+      const response = await fetch(file.uri);
+      if (!response.ok) throw new ApiError(response.status, "Couldn't read the selected file.");
+      blob = await response.blob();
+    }
+    form.append('file', blob, file.name);
+    return;
+  }
+  // React Native FormData accepts { uri, name, type } for local files.
+  form.append('file', { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' } as unknown as Blob);
+};
+
+const fileForm = async (file: PickedFile) => {
+  const form = new FormData();
+  await appendFile(form, file);
+  return form;
+};
+
+const UPLOAD_TIMEOUT_MS = 120000;
+
+export const createResource = async (body: ResourceBody, file?: PickedFile | null) => {
+  const form = new FormData();
+  form.append('title', body.title);
+  if (body.description) form.append('description', body.description);
+  if (body.module) form.append('module', body.module);
+  if (file) await appendFile(form, file);
+  return request<ResourceResponse>('/resources', { method: 'POST', form, timeoutMs: UPLOAD_TIMEOUT_MS });
+};
+
+export const updateResource = (id: number, body: ResourceBody) =>
+  request<ResourceResponse>(`/resources/${id}`, { method: 'PUT', body });
+
+export const replaceResourceAttachment = async (id: number, file: PickedFile) =>
+  request<ResourceResponse>(`/resources/${id}/attachment`, { method: 'POST', form: await fileForm(file), timeoutMs: UPLOAD_TIMEOUT_MS });
+
+export const deleteResource = (id: number) => request<void>(`/resources/${id}`, { method: 'DELETE' });
+
+
 export default {
   API_BASE_URL,
   login,
   register,
   getDepartments,
   getMe,
+  getPublications,
+  getDepartmentFeed,
+  createPublication,
+  getComments,
+  addComment,
+  getMyCommunities,
+  searchUsers,
+  getCommunities,
+  joinCommunity,
+  leaveCommunity,
+  createCommunity,
+  updateCommunity,
+  deleteCommunity,
+  getCommunityMembers,
+  updateMe,
+  getUserPublications,
+  updatePublication,
+  deletePublication,
+  getResources,
+  getResourceModules,
+  getResourceDownloadUrl,
+  createResource,
+  updateResource,
+  replaceResourceAttachment,
+  deleteResource,
   checkBackendHealth,
   checkDbStatus,
 };
